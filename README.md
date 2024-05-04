@@ -4,7 +4,8 @@ for when you need to turn it of and on again
 using the following libraries
 
 for the cheap soundboards
-https://github.com/Critters/MP3FLASH16P
+// no longer using this library as it didnt work right https://github.com/Critters/MP3FLASH16P
+https://github.com/NachtRaveVL/BY8X01-16P-Arduino
 
 for the 7 segment display
 https://github.com/avishorp/TM1637
