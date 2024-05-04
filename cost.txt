@@ -1,0 +1,11 @@
+knife switch 	2.35
+sound board 	5
+dfplayer	2.25
+sd card		1.60
+key cabinet 	20
+arduino 	7-10
+rotary encoder 	2
+led display	3.5
+power sw	1
+speaker 	2.75
+large leds 	3
