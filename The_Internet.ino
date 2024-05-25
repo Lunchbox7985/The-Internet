@@ -1,4 +1,4 @@
-#include "BY8X01-16P.h"
+#include <DFRobotDFPlayerMini.h>
 #include <RotaryEncoder.h>
 #include <TM1637Display.h>
 #include <SoftwareSerial.h>
@@ -17,6 +17,7 @@ const int offLed = A0;     //the red light on the front of the box
 const int onLed = A1;      //the green light on the front of the box
 const int offSelLed = A2;  //the light that indicates you have "off" sound selected to change
 const int onSelLed = A3;   //the light that indicates you have "on" sound selected to change
+const int monitorLed = 9; //led in the pc monitor
 
 //define pins for the knife switch
 const int onSw = 12;   //the on side of the knife sw
@@ -42,6 +43,7 @@ int numOffSounds = 16;  //how many "off" sounds you have
 int volume = 15;         //sound board boot up volume (value of 1-30) can be changed with knob
 int dispBrightness = 4;  //display brightness (value from 1 to 7)
 
+class Mp3Notify;
 // Create a TM1637 display object
 TM1637Display display(CLK, DIO);
 //Create object for rotary encoder
@@ -50,8 +52,43 @@ RotaryEncoder encoder(DT_PIN, CLK_PIN);
 const byte rxPin = 10;
 const byte txPin = 11;
 SoftwareSerial swSerial(rxPin, txPin);  // SoftwareSerial using RX pin D2 and TX pin D3
+typedef DFMiniMp3<SoftwareSerial, Mp3Notify> DfMp3;
+DfMp3 player(swSerial);
 
-BY8X0116P player(swSerial);
+class Mp3Notify {
+public:
+  static void PrintlnSourceAction(DfMp3_PlaySources source, const char* action) {
+    if (source & DfMp3_PlaySources_Sd) {
+      Serial.print("SD Card, ");
+    }
+    if (source & DfMp3_PlaySources_Usb) {
+      Serial.print("USB Disk, ");
+    }
+    if (source & DfMp3_PlaySources_Flash) {
+      Serial.print("Flash, ");
+    }
+    Serial.println(action);
+  }
+  static void OnError([[maybe_unused]] DfMp3& mp3, uint16_t errorCode) {
+    // see DfMp3_Error for code meaning
+    Serial.println();
+    Serial.print("Com Error ");
+    Serial.println(errorCode);
+  }
+  static void OnPlayFinished([[maybe_unused]] DfMp3& mp3, [[maybe_unused]] DfMp3_PlaySources source, uint16_t track) {
+    Serial.print("Play finished for #");
+    Serial.println(track);
+  }
+  static void OnPlaySourceOnline([[maybe_unused]] DfMp3& mp3, DfMp3_PlaySources source) {
+    PrintlnSourceAction(source, "online");
+  }
+  static void OnPlaySourceInserted([[maybe_unused]] DfMp3& mp3, DfMp3_PlaySources source) {
+    PrintlnSourceAction(source, "inserted");
+  }
+  static void OnPlaySourceRemoved([[maybe_unused]] DfMp3& mp3, DfMp3_PlaySources source) {
+    PrintlnSourceAction(source, "removed");
+  }
+};
 
 // state of the switch:
 int OnState = 0;   // variable for reading the On status
@@ -67,6 +104,12 @@ unsigned long previousMillis = 0;
 const long interval = 250;  //how often to flash the red led in milliseconds
 int ledState = LOW;
 
+//variable for the flickering monitor led
+const int brightLevel = 255; // Highest brightness level (0-255)
+const int dimLevel = 100;  // Lower brightness level (0-255)
+unsigned long previousMonitorMillis = 0; // Stores the time of the last flicker
+
+
 //this is so the display only updates on change
 int previousCombinedDisplay = 0;  // Store the previous value of combinedDisplay
 int previousvolume = 1;           // Store the previous value of volume
@@ -75,6 +118,7 @@ int previousDisp = 0;
 unsigned long lastButtonPress = 0;
 const int debounceTime = 500;  // debounce time for pressing knob
 
+//settings for 7 seg to display "rAnd" for random mode
 const uint8_t SEG_rAnd[] = {
   SEG_E | SEG_G,                                  // r
   SEG_A | SEG_B | SEG_C | SEG_E | SEG_F | SEG_G,  // A
@@ -86,10 +130,11 @@ const uint8_t SEG_rAnd[] = {
 
 void setup() {
   Serial.begin(9600);
-  swSerial.begin(player.getSerialBaud());  // Begin SoftwareSerial
-  pinMode(rxPin, INPUT);                   // Must manually set pin modes for RX/TX pins (SoftwareSerial bug)
+  swSerial.begin(9600);   // Begin SoftwareSerial
+  pinMode(rxPin, INPUT);  // Must manually set pin modes for RX/TX pins (SoftwareSerial bug)
   pinMode(txPin, OUTPUT);
-  player.init();  // Initializes module
+  player.begin();  // Initializes module
+  player.reset();
   player.setVolume(volume);
   display.setBrightness(dispBrightness);
   pinMode(onLed, OUTPUT);
@@ -98,12 +143,29 @@ void setup() {
   pinMode(offSelLed, OUTPUT);
   pinMode(onSw, INPUT_PULLUP);
   pinMode(offSw, INPUT_PULLUP);
+  pinMode(monitorLed, OUTPUT);
   analogWrite(onSelLed, 255);  //defaults to selecting on sound, so turn this led on at boot
   analogWrite(offSelLed, 0);   //defaults to selecting on sound, so turn this led off at boot
   encoder.setPosition(1);      //defaults to 0 which trips the wrap around and sets on sound to 10 on boot
 }  // setup()
 
 void loop() {
+
+// flicker the monitor led
+
+  // Calculate time elapsed since last flicker
+  unsigned long currentMonitorMillis = millis();
+  unsigned long interval = currentMonitorMillis - previousMonitorMillis;
+
+  // Check if enough time has passed for the next flicker
+  if (interval >= 20 && interval <= 100) { // Adjust range for desired speed
+    previousMonitorMillis = currentMonitorMillis;  // Update time for next check
+
+    // Randomly choose between bright and dim levels
+    int brightness = random(2) ? brightLevel : dimLevel;
+    analogWrite(monitorLed, brightness);
+  }
+
 
   //read and set encoder positions to handle value changes and wrap arounds
   static int pos = 1;
@@ -153,10 +215,10 @@ void loop() {
     analogWrite(offLed, 0);
     if (randomMode == false) {
       player.setVolume(volume);
-      player.playFileIndex(onSound);  //plays selected on sound
+      player.playMp3FolderTrack(onSound);  //plays selected on sound
     } else {
       player.setVolume(volume);
-      player.playFileIndex(random(1, numOnSounds + 1));  //plays random on sound
+      player.playMp3FolderTrack(random(1, numOnSounds + 1));  //plays random on sound
     }
     on = true;
     mid = false;
@@ -167,11 +229,11 @@ void loop() {
   if ((OnState == HIGH) && (OffState == LOW) && (off == false)) {
     if (randomMode == false) {
       player.setVolume(volume);
-      player.playFileIndex((offSound + numOnSounds));  //plays selected off sound
+      player.playMp3FolderTrack((offSound + numOnSounds));  //plays selected off sound
     } else {
 
       player.setVolume(volume);
-      player.playFileIndex(random(numOnSounds + 1, numOnSounds + numOffSounds + 1));  //plays random off sound
+      player.playMp3FolderTrack(random(numOnSounds + 1, numOnSounds + numOffSounds + 1));  //plays random off sound
     }
     analogWrite(onLed, 0);
     on = false;
