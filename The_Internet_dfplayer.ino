@@ -177,6 +177,9 @@ void setup() {
 
 void loop() {
 
+  //  needed for serial communication between arduino and DFPlayer, otherwise messages get backlogged and comms stop
+player.loop();
+  
   //read and set encoder positions to handle value changes and wrap arounds
   static int pos = 1;
   unsigned long currentMillis = millis();
@@ -371,3 +374,4 @@ void loop() {
     }
   }
 }  // loop ()
+
