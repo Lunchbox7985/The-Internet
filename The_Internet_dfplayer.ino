@@ -19,6 +19,7 @@ const int offLedBlink = 2;  //the red light on the front of the box in blink mod
 const int onLed = A1;       //the green light on the front of the box
 const int offSelLed = A2;   //the light that indicates you have "off" sound selected to change
 const int onSelLed = A3;    //the light that indicates you have "on" sound selected to change
+const int monitorLed = 9; //led in the pc monitor
 
 //define pins for the knife switch
 const int onSw = 12;   //the on side of the knife sw
@@ -115,6 +116,11 @@ int fadeSpeed = 25;  //determines speed of fade, higher number is slower
 int brightness = 0;  // Adjust this value (0-255) to control brightness
 bool fadeUp = true;  // Flag to track fade direction (up or down)
 
+//variable for the flickering monitor led
+const int brightLevel = 255; // Highest brightness level (0-255)
+const int dimLevel = 100;  // Lower brightness level (0-255)
+unsigned long previousMonitorMillis = 0; // Stores the time of the last flicker
+
 //this is so the display only updates on change
 int previousCombinedDisplay = 0;  // Store the previous value of combinedDisplay
 int previousvolume = 1;           // Store the previous value of volume
@@ -179,6 +185,21 @@ void loop() {
 
   //  needed for serial communication between arduino and DFPlayer, otherwise messages get backlogged and comms stop
 player.loop();
+
+// flicker the monitor led
+
+  // Calculate time elapsed since last flicker
+  unsigned long currentMonitorMillis = millis();
+  unsigned long monitorInterval = currentMonitorMillis - previousMonitorMillis;
+
+  // Check if enough time has passed for the next flicker
+  if (monitorInterval >= 100) { // Adjust range for desired speed
+    previousMonitorMillis = currentMonitorMillis;  // Update time for next check
+
+    // Randomly choose between bright and dim levels
+    int monitorBrightness = random(2) ? brightLevel : dimLevel;
+    analogWrite(monitorLed, monitorBrightness);
+  }
   
   //read and set encoder positions to handle value changes and wrap arounds
   static int pos = 1;
@@ -374,4 +395,3 @@ player.loop();
     }
   }
 }  // loop ()
-
